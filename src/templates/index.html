@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Content Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .iframe-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            z-index: 1000;
+        }
+        .iframe-container.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .iframe-content {
+            width: 90%;
+            height: 90%;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1001;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+        }
+        .loading.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8">LinkedIn Content Analyzer</h1>
+        
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-6">
+            <p class="text-gray-600 mb-6">
+                Click the button below to analyze your LinkedIn feed. The process will:
+                1. Scrape your LinkedIn feed
+                2. Analyze the content
+                3. Generate content suggestions
+            </p>
+            
+            <button id="analyzeBtn" 
+                    class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors">
+                Start Analysis
+            </button>
+        </div>
+
+        <div id="results" class="max-w-4xl mx-auto mt-8 hidden">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold mb-4">Analysis Results</h2>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2">Top Topics</h3>
+                    <div id="topTopics" class="grid grid-cols-2 gap-4"></div>
+                </div>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2">Engagement Metrics</h3>
+                    <div id="engagementMetrics" class="grid grid-cols-3 gap-4"></div>
+                </div>
+                
+                <div>
+                    <h3 class="text-xl font-semibold mb-2">Content Suggestions</h3>
+                    <div id="contentSuggestions" class="space-y-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="iframeContainer" class="iframe-container">
+        <div class="iframe-content">
+            <iframe id="linkedinFrame" width="100%" height="100%" frameborder="0"></iframe>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <p>Analyzing your LinkedIn feed...</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const iframeContainer = document.getElementById('iframeContainer');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            // Show iframe
+            iframeContainer.classList.add('active');
+            
+            try {
+                // Start analysis
+                loading.classList.add('active');
+                
+                const response = await fetch('/run-analysis', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Hide iframe and loading
+                    iframeContainer.classList.remove('active');
+                    loading.classList.remove('active');
+                    
+                    // Show results
+                    results.classList.remove('hidden');
+                    
+                    // Display top topics
+                    const topTopics = document.getElementById('topTopics');
+                    topTopics.innerHTML = data.data.top_topics
+                        .map(([topic, score]) => `
+                            <div class="bg-gray-50 p-4 rounded">
+                                <div class="font-semibold">${topic}</div>
+                                <div class="text-sm text-gray-600">Score: ${score.toFixed(3)}</div>
+                            </div>
+                        `).join('');
+                    
+                    // Display engagement metrics
+                    const engagementMetrics = document.getElementById('engagementMetrics');
+                    const metrics = data.data.engagement_analysis.average_engagement;
+                    engagementMetrics.innerHTML = `
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="font-semibold">Likes</div>
+                            <div class="text-2xl">${metrics.likes.toFixed(0)}</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="font-semibold">Comments</div>
+                            <div class="text-2xl">${metrics.comments.toFixed(0)}</div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded">
+                            <div class="font-semibold">Shares</div>
+                            <div class="text-2xl">${metrics.shares.toFixed(0)}</div>
+                        </div>
+                    `;
+                    
+                    // Display content suggestions
+                    const contentSuggestions = document.getElementById('contentSuggestions');
+                    contentSuggestions.innerHTML = data.data.top_posts
+                        .map(post => `
+                            <div class="bg-gray-50 p-4 rounded">
+                                <div class="font-semibold mb-2">Engagement: ${post.total_engagement}</div>
+                                <div class="text-sm text-gray-600">${post.text.substring(0, 200)}...</div>
+                            </div>
+                        `).join('');
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                alert('Analysis failed: ' + error.message);
+                loading.classList.remove('active');
+                iframeContainer.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html> 
